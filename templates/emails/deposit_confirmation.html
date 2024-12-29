@@ -1,0 +1,13 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Deposit Confirmation</title>
+</head>
+<body>
+    <h1>Your Deposit is Confirmed!</h1>
+    <p>Dear {{ transaction.user.username }},</p>
+    <p>Your deposit of {{ transaction.amount }} USDC has been successfully processed.</p>
+    <p>Transaction ID: {{ transaction.stellar_transaction_id }}</p>
+    <p>Thank you for using our service!</p>
+</body>
+</html>
