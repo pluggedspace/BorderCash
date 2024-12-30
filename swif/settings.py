@@ -5,16 +5,14 @@ from pathlib import Path
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-# Quick-start development settings - unsuitable for production
-# See https://docs.djangoproject.com/en/5.0/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
 SECRET_KEY = 'django-insecure-^g9!=@fy()kp51jpxu2e99d0n#7%_d4-5+28-*c_o!@0=5n!%n'
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+DEBUG = False
 
-ALLOWED_HOSTS = []
+ALLOWED_HOSTS = ['*']
 
 # Application definition
 INSTALLED_APPS = [
@@ -90,18 +88,9 @@ CSRF_COOKIE_SECURE = False
 
 CORS_ALLOW_ALL_ORIGINS = True
 
-CORS_ALLOWED_ORIGINS = [
+CORS_ALLOWED_ORIGINS = []
 
-    "http://127.0.0.1:8000",  # If running Django on a different port
-    "http://localhost:52586",
-    "http://localhost:50930",
-    "https://chicken-aware-nicely.ngrok-free.app"
-]
-
-CORS_ALLOWED_ORIGIN_REGEXES = [
-    r"^http://localhost:\d+$",  # Allow all ports on localhost
-    r"^http://127.0.0.1:\d+$",  # Allow all ports on 127.0.0.1
-]
+CORS_ALLOWED_ORIGIN_REGEXES = []
 
 CORS_ALLOW_CREDENTIALS = True
 
