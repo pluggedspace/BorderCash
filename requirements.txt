@@ -187,7 +187,6 @@ tenacity==9.0.0
 tensorboard==2.18.0
 tensorboard-data-server==0.7.2
 tensorflow==2.18.0
-tensorflow_intel @ file:///C:/Users/USER/Downloads/tensorflow_intel-2.18.0-cp312-cp312-win_amd64.whl#sha256=a5818043f565cf74179b67eb52fc060587ccecb9540141c39d84fbcb37ecff8c
 termcolor==2.4.0
 textblob==0.18.0.post0
 tf_keras==2.18.0
