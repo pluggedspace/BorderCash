@@ -1,0 +1,14 @@
+<!-- templates/admin/update_all_prices_confirm.html -->
+{% extends "admin/base_site.html" %}
+
+{% block content %}
+    <h1>Update All Tokenized Stock Prices</h1>
+    <p>This will update prices for all active tokenized stocks. The process may take some time depending on the number of stocks.</p>
+    <form method="post">
+        {% csrf_token %}
+        <div class="submit-row">
+            <input type="submit" class="default" value="Update All Prices">
+            <a href="../" class="button cancel-link">Cancel</a>
+        </div>
+    </form>
+{% endblock %}

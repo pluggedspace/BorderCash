@@ -1,7 +1,7 @@
 from django.contrib import admin
 
 from app.models import UserProfile
-from .models import KYCRequest, Notification
+from .models import KYCRequest
 
 
 class KYCRequestAdmin(admin.ModelAdmin):
@@ -16,6 +16,3 @@ class KYCRequestAdmin(admin.ModelAdmin):
 admin.site.register(KYCRequest, KYCRequestAdmin)
 
 
-@admin.register(Notification)
-class KYCDocumentAdmin(admin.ModelAdmin):
-    list_display = ('user', 'message')

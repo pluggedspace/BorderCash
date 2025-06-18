@@ -1,0 +1,90 @@
+services:
+  web:
+    build: .
+    expose:
+      - "8002"
+    env_file:
+      - .env
+    environment:
+      - DATABASE_URL=postgresql://BC:CashBorderless2025@db:5432/border
+      - VIRTUAL_HOST=api.border.cash
+      - VIRTUAL_PORT=8002
+      - LETSENCRYPT_HOST=api.border.cash
+      - LETSENCRYPT_EMAIL=contact@border.cash
+      - INVESTMENT_ACCOUNT_SECRET=SCT6662WJWFLAXLOWPZT6WXKPCREH4L4VDNMK7SI6ZTRZDS625CHFVHX
+    volumes:
+      - .:/app
+    depends_on:
+      - db
+      - redis
+    restart: unless-stopped
+    networks:
+      - internal_network
+      - nginx-proxy-net
+    command: gunicorn swif.wsgi:application --bind 0.0.0.0:8002 --workers 3 --timeout 120
+
+  redis:
+    image: redis:7
+    container_name: bordercash-redis
+    command: ["redis-server", "--requirepass", "SwifLockRedis"]
+    ports:
+      - "6379:6379"
+    networks:
+      - internal_network
+    restart: unless-stopped
+
+  celery_worker:
+    build: .
+    command: celery -A swif worker --loglevel=info
+    volumes:
+      - .:/app
+    depends_on:
+      - db
+      - redis
+    environment:
+      - DJANGO_SETTINGS_MODULE=swif.settings
+      - CELERY_BROKER_URL=redis://:SwifLockRedis@redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://:SwifLockRedis@redis:6379/0
+    networks:
+      - internal_network
+
+  celery_beat:
+    build: .
+    command: celery -A swif beat --loglevel=info --scheduler django_celery_beat.schedulers:DatabaseScheduler
+    volumes:
+      - .:/app
+    depends_on:
+      - db
+      - redis
+    environment:
+      - DJANGO_SETTINGS_MODULE=swif.settings
+      - CELERY_BROKER_URL=redis://:SwifLockRedis@redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://:SwifLockRedis@redis:6379/0
+    networks:
+      - internal_network
+
+  db:
+    image: postgres:15
+    container_name: bordercash-db
+    volumes:
+      - db_data:/var/lib/postgresql/data/
+    environment:
+      POSTGRES_DB: border
+      POSTGRES_USER: BC
+      POSTGRES_PASSWORD: CashBorderless2025
+    networks:
+      - internal_network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U BC -d border"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  db_data:
+
+networks:
+  internal_network:
+    driver: bridge
+  nginx-proxy-net:
+    external: true

@@ -1,20 +1,24 @@
 from rest_framework import serializers
-from .models import TransactionHistory, PortfolioAllocation, TradeHistory
+from .models import TokenizedStock, UserInvestment, TransactionLog, InvestmentAccount
 
-
-class TransactionSerializer(serializers.ModelSerializer):
+class TokenizedStockSerializer(serializers.ModelSerializer):
     class Meta:
-        model = TransactionHistory
-        fields = ['id', 'user', 'symbol', 'transaction_type', 'quantity', 'price', 'status', 'created_at']
+        model = TokenizedStock
+        fields = '__all__'
 
-
-class PortfolioAllocationSerializer(serializers.ModelSerializer):
+class InvestmentAccountSerializer(serializers.ModelSerializer):
     class Meta:
-        model = PortfolioAllocation
-        fields = ['user', 'symbol', 'quantity', 'avg_price']
+        model = InvestmentAccount
+        fields = '__all__'
 
-
-class TradeHistorySerializer(serializers.ModelSerializer):
+class UserInvestmentSerializer(serializers.ModelSerializer):
     class Meta:
-        model = TradeHistory
-        fields = ['user', 'stock_symbol', 'quantity', 'purchase_price', 'purchase_timestamp']
+        model = UserInvestment
+        fields = '__all__'
+
+class TransactionLogSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = TransactionLog
+        fields = '__all__'
+
+

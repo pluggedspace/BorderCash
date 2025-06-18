@@ -14,9 +14,7 @@ from stellar_sdk import Server, Asset
 
 from app.models import Transaction, USDAccount, PlatformAccount, User
 from app.services.transact.utils.changelly_crypto import ChangellyClient
-from app.services.transact.utils.fiat import ChangellyFiatApi
 from app.services.transact.utils.utils import calculate_fee
-from app.services.transact.utils.ChangellyFiat import ChangellyFiat
 
 logger = logging.getLogger(__name__)
 
@@ -53,7 +51,7 @@ class DepositService:
         self.user = user
         self.usd_account = USDAccount.objects.get(user=user)
         self.platform_account = PlatformAccount.objects.first()
-        self.stellar_server = Server("https://horizon-testnet.stellar.org")
+        self.stellar_server = Server("https://horizon.stellar.org")
         self.custody_address = settings.PLATFORM_CUSTODY_STELLAR_ACCOUNT
 
         """self.api = ChangellyFiatApi(
@@ -84,17 +82,25 @@ class DepositService:
     # DIRECT STELLAR DEPOSIT
     def initiate_usdc_deposit(self, amount):
         try:
-            # Convert amount to Decimal after ensuring it's a valid number
-            amount = Decimal(amount) if isinstance(amount, (int, float, str)) else None
+            # First validate the amount before conversion
             if amount is None:
-                raise ValueError("Invalid amount format")
+                raise ValueError("Amount cannot be None")
+            
+            # Try to convert the amount to Decimal
+            try:
+                amount = Decimal(str(amount))  # Convert to string first for safer conversion
+                if amount <= 0:
+                    raise ValueError("Amount must be greater than 0")
+            except (TypeError, InvalidOperation):
+                raise ValueError(f"Invalid amount format: {amount}")
 
             # Calculate fee
             total_amount, fee, net_amount = calculate_fee('deposit', amount)
-
-            # Proceed with creating the transaction record and instructions
+        
+            # Create unique memo
             memo = str(uuid.uuid4())[:12]
-
+        
+            # Create transaction record
             pending_deposit = Transaction.objects.create(
                 user=self.user,
                 amount=amount,
@@ -105,32 +111,42 @@ class DepositService:
                 payment_method="stellar_usdc",
                 gateway="usdc transfer",
                 timestamp=timezone,
+                details="Transaction initiated via Direct USDCXLM"
             )
-
+        
             logger.info(f"Initiated USDC deposit: {pending_deposit.id}, Amount: {amount}, User: {self.user}")
 
-        except (InvalidOperation, ValueError) as e:
-            logger.error(f"Invalid amount: {amount} - Error: {e}")
+            # Serialize the asset for JSON compatibility
+            asset = Asset("USDC", "GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN")
+            serialized_asset = {
+                "code": asset.code,
+                "issuer": asset.issuer
+            }
+
+            # Prepare instructions
+            instructions = {
+                "amount": str(amount),  # Convert Decimal to string for JSON serialization
+                "asset": serialized_asset,  # Use the serialized version of the asset
+                "destination_address": settings.PLATFORM_CUSTODY_STELLAR_ACCOUNT,
+                "memo": memo,
+                "memo_type": "text"
+            }
+        
+            # Start polling thread
+            threading.Thread(
+                target=self.poll_for_deposit_confirmation, 
+                args=(pending_deposit.id,),
+                daemon=True  # Make thread daemon so it doesn't block program exit
+            ).start()
+        
+            return instructions, pending_deposit.id
+
+        except ValueError as e:
+            logger.error(f"Validation error in USDC deposit: {e}")
             return None, None
         except Exception as e:
-            logger.error(f"Unexpected error during deposit initiation: {e}")
+            logger.error(f"Unexpected error during USDC deposit initiation: {str(e)}", exc_info=True)
             return None, None
-
-        """ replace assets with this
-        "asset": Asset("USDC", "GBBD47IFOR25FKLPAG42V6J33ZZW3DELPWZXX4SAEYZ35A6KTUV7USDC")
-        """
-
-        instructions = {
-            "amount": amount,
-            "asset": "USDC",
-            "destination_address": settings.PLATFORM_CUSTODY_STELLAR_ACCOUNT,
-            "memo": memo,
-            "memo_type": "text"
-        }
-
-        threading.Thread(target=self.poll_for_deposit_confirmation, args=(pending_deposit.id,)).start()
-
-        return instructions, pending_deposit.id
 
     def poll_for_deposit_confirmation(self, pending_deposit_id):
         while True:
@@ -162,28 +178,45 @@ class DepositService:
                         payment['asset_issuer'] == settings.USDC_ISSUER_PUBLIC_KEY and
                         float(payment['amount']) == float(pending_deposit.amount) and
                         payment.get('memo') == pending_deposit.memo):
+        
                     usdc_amount = Decimal(payment['amount'])
-                    self.usd_account.credit(usdc_amount)
-                    self.platform_account.credit(usdc_amount)
+        
+                    # Fetch the fee from the pending deposit record
+                    fee = pending_deposit.fee_amount
+                    net_amount = usdc_amount - fee
 
+                    # Credit net amount to user
+                    self.usd_account.credit(net_amount)
+
+        
+                    # Fetch the Commission account from PlatformAccount
+                    commission_account = PlatformAccount.objects.get(name="Commission")
+
+                    # Credit fee to the Commission account
+                    commission_account.credit(fee)
+
+
+                    # Update deposit status
                     pending_deposit.status = 'completed'
                     pending_deposit.stellar_transaction_id = payment['transaction_hash']
                     pending_deposit.save()
 
-                    # Log the completed deposit
                     logger.info(
-                        f"Deposit confirmed: {pending_deposit.id}, Amount: {usdc_amount}, Transaction ID: "
-                        f"{payment['transaction_hash']}")
-
-                    Transaction.objects.create(
-                        user=self.user,
-                        amount=usdc_amount,
-                        transaction_type='USDC deposit',
-                        status='completed',
-                        stellar_transaction_id=payment['transaction_hash']
+                        f"Deposit confirmed: {pending_deposit.id}, Amount: {usdc_amount}, Net Amount: {net_amount}, Fee: {fee}, Transaction ID: {payment['transaction_hash']}"
                     )
 
-                    return {"status": "success", "message": "Deposit confirmed and processed."}
+                    # Record the deposit transaction
+                    Transaction.objects.create(
+                    user=self.user,
+                    amount=net_amount,
+                    fee_amount=fee,
+                    transaction_type='USDC deposit',
+                    status='completed',
+                    stellar_transaction_id=payment['transaction_hash']
+                )
+
+                return {"status": "success", "message": "Deposit confirmed and processed."}
+
 
             logger.info(f"Deposit {pending_deposit_id} not yet detected.")
             return {"status": "pending", "message": "Deposit not yet detected. Please try confirming again later."}
@@ -214,31 +247,44 @@ class DepositService:
                     payment['to'] == settings.PLATFORM_CUSTODY_STELLAR_ACCOUNT and
                     payment['asset_type'] == 'credit_alphanum4' and
                     payment['asset_code'] == 'USDC' and
-                    payment['asset_issuer'] == settings.USDC_ISSUER_PUBLIC_KEY and
+                   payment['asset_issuer'] == settings.USDC_ISSUER_PUBLIC_KEY and
                     Decimal(payment['amount']) == amount):
+        
                 usdc_amount = Decimal(payment['amount'])
-                self.usd_account.credit(usdc_amount)
-                self.platform_account.credit(usdc_amount)
 
+                # Find the matching deposit and fetch its fee
                 pending_deposit = matching_deposits.first()
+                fee = pending_deposit.fee_amount
+                net_amount = usdc_amount - fee
+
+                # Credit net amount to user
+                self.usd_account.credit(net_amount)
+
+                # Credit fee to platform account
+                self.platform_account.credit(fee)
+
+               # Update deposit status
                 pending_deposit.status = 'completed'
                 pending_deposit.stellar_transaction_id = payment['transaction_hash']
                 pending_deposit.reconciled_at = timezone.now()
                 pending_deposit.save()
 
                 logger.info(
-                    f"Reconciled deposit: {pending_deposit.id}, Amount: {usdc_amount}, Transaction ID: "
-                    f"{payment['transaction_hash']}")
+                f"Reconciled deposit: {pending_deposit.id}, Amount: {usdc_amount}, Net Amount: {net_amount}, Fee: {fee}, Transaction ID: {payment['transaction_hash']}"
+                )
 
+                # Record the deposit transaction
                 Transaction.objects.create(
                     user=self.user,
-                    amount=usdc_amount,
+                    amount=net_amount,
+                    fee_amount=fee,
                     transaction_type='USDC deposit (reconciled)',
                     status='completed',
                     stellar_transaction_id=payment['transaction_hash']
                 )
 
                 return {"status": "success", "message": "Deposit reconciled and processed."}
+
 
         logger.warning(f"No matching transaction found on the Stellar network for amount: {amount}.")
         return {"status": "error", "message": "No matching transaction found on the Stellar network."}
@@ -281,6 +327,7 @@ class DepositService:
     def deposit_to_usdc(request, from_currency: str, amount: Union[Decimal, str, None]) -> Dict[str, Union[str, bool]]:
         """
         Deposit a specified currency and convert to USDC on Stellar (USDCXLM).
+        Handles amount validation against Changelly's limits.
         """
         try:
             # Step 0: Extract and verify user
@@ -313,71 +360,102 @@ class DepositService:
             if not stellar_address:
                 raise ValueError("Invalid platform Stellar address configuration")
 
-            # Step 4: Calculate exchange amount
-            to_currency = "USDCXLM"
+            # NEW Step 4: Check exchange limits before proceeding
+            try:
+                # Get exchange amount first with a small test amount to verify limits
+                test_estimation = changelly_client.get_exchange_amount(
+                from_currency=from_currency.lower(),
+                to_currency="usdcxlm",
+                amount=str(amount)
+                )
+    
+                if not test_estimation or not test_estimation[0]:
+                    raise ValueError("Unable to get exchange estimation")
+        
+                # If we get here, the amount is within limits
+                exchange_data = test_estimation[0]
+    
+            except Exception as e:
+                if "Maximum amount is" in str(e):
+                    # Extract the max amount from the error message
+                    max_amount = str(e).split("Maximum amount is ")[-1].split()[0]
+                    raise ValueError(f"Amount exceeds maximum limit of {max_amount} {from_currency}")
+                elif "Minimum amount is" in str(e):
+                    # Extract the min amount from the error message
+                    min_amount = str(e).split("Minimum amount is ")[-1].split()[0]
+                    raise ValueError(f"Amount is below minimum limit of {min_amount} {from_currency}")
+                else:
+                    raise
+
+            # Step 5: Calculate exchange amount
             estimated_amount_data = changelly_client.get_exchange_amount(
                 from_currency=from_currency.lower(),
-                to_currency=to_currency.lower(),
+                to_currency="usdcxlm",
                 amount=str(amount)
             )
 
             exchange_data = estimated_amount_data[0]
-            estimated_amount = exchange_data.get('amountTo')
+            amount_to = exchange_data.get('amountTo')
             network_fee = exchange_data.get('networkFee')
             rate = exchange_data.get('rate')
             transaction_fee = exchange_data.get('fee')
 
-            if not estimated_amount or Decimal(estimated_amount) <= 0:
+            if not amount_to or Decimal(amount_to) <= 0:
                 raise ValueError("Invalid exchange rate received from Changelly")
 
-            # Step 5: Create Changelly transaction
+            # Step 6: Create Changelly transaction
             with db_transaction.atomic():
                 changelly_tx = changelly_client.create_transaction(
                     from_currency=from_currency.lower(),
-                    to_currency=to_currency.lower(),
+                    to_currency="usdcxlm",
                     amount=str(amount),
                     address=stellar_address
                 )
 
-                # Ensure valid transaction response with transaction ID and deposit address
-                transaction_id = changelly_tx.get("id")
-                deposit_address = changelly_tx.get("payinAddress")
-                if not transaction_id or not deposit_address:
-                    raise ValueError("Failed to create Changelly transaction or retrieve deposit address")
+                # Ensure valid transaction response
+            transaction_id = changelly_tx.get("id")
+            deposit_address = changelly_tx.get("payinAddress")
+            if not transaction_id or not deposit_address:
+                raise ValueError("Failed to create Changelly transaction or retrieve deposit address")
 
-                # Record transaction in the database
-                db_transaction_record = Transaction.objects.create(
-                    user=user,
-                    gateway="Changelly",
-                    transaction_id=transaction_id,
-                    transaction_type='deposit',
-                    currency_from=from_currency.upper(),
-                    amount=Decimal(estimated_amount),
-                    currency="USDC",
-                    status="PENDING",
-                    destination_account=stellar_address,
-                    payment_method="crypto",
-                )
+            memo = str(uuid.uuid4())
 
-                # Trigger polling in a separate thread
-                threading.Thread(target=DepositService.poll, args=(transaction_id, db_transaction_record.id)).start()
+        
+            # Record transaction in database
+            db_transaction_record = Transaction.objects.create(
+                user=user,
+                gateway="Changelly",
+                transaction_id=transaction_id,
+                transaction_type='deposit',
+                currency_from=from_currency.upper(),
+                amount=amount_to,
+                currency="USDC",
+                status="PENDING",
+                memo=memo,
+                destination_account=stellar_address,
+                payment_method="crypto",
+                details="Transaction initiated via Changelly",
+            )
 
-                # Return detailed response
-                return {
-                    "success": True,
-                    "message": "Deposit initiated successfully",
-                    "transaction_id": transaction_id,
-                    "deposit_details": {
-                        "from_currency": from_currency,
-                        "to_currency": to_currency,
-                        "original_amount": str(amount),
-                        "estimated_usdc": estimated_amount,
-                        "network_fee": network_fee,
-                        "rate": rate,
-                        "transaction_fee": transaction_fee,
-                        "deposit_address": deposit_address
-                    }
+            # Trigger polling in a separate thread
+            threading.Thread(target=DepositService.poll, args=(transaction_id, db_transaction_record.id)).start()
+
+            # Return detailed response
+            return {
+                "success": True,
+                "message": "Deposit initiated successfully",
+                "transaction_id": transaction_id,
+                "deposit_details": {
+                    "from_currency": from_currency,
+                    "to_currency": "USDCXLM",
+                    "original_amount": str(amount),
+                    "estimated_usdc": amount_to,
+                    "network_fee": network_fee,
+                    "rate": rate,
+                    "transaction_fee": transaction_fee,
+                    "deposit_address": deposit_address
                 }
+            }
 
         except ValueError as ve:
             logging.error(f"Validation error: {ve}", exc_info=True)
@@ -386,7 +464,7 @@ class DepositService:
         except Exception as e:
             logging.error(f"Unexpected error: {e}", exc_info=True)
             return {"success": False, "error": "An unexpected error occurred. Please try again later."}
-
+        
     @staticmethod
     def poll(transaction_id: str, db_transaction_record_id: int):
         """
@@ -448,25 +526,39 @@ class DepositService:
         try:
             # Fetch the transaction record
             transaction = Transaction.objects.get(id=transaction_id)
+            amount_to = transaction.amount  # Amount received after conversion
 
-            # Update the user's USDAccount balance
+            # Calculate Swif's fee
+            fee_amount = calculate_fee('deposit', amount_to)
+
+            # Net amount after Swif's fee
+            net_amount = amount_to - fee_amount
+
+            # Fetch or create the required accounts
+            commission_account, _ = PlatformAccount.objects.get_or_create(name="Commission", currency="USD")
+            vault_account, _ = PlatformAccount.objects.get_or_create(name="Vault", currency="USD")
             user_account = USDAccount.objects.get(user=transaction.user)
-            user_account.balance += transaction.amount
-            user_account.save()
 
-            # Update the platform's USD balance
-            platform_account = PlatformAccount.objects.get(name="Pool", currency="USD")
-            platform_account.balance += transaction.amount
-            platform_account.save()
+            # Credit the user's account with the net amount
+            user_account.credit(net_amount)
+
+            # Store Swif's fee in the Commission account
+            commission_account.credit(fee_amount)
+
+            # Track the full deposit in the Vault
+            vault_account.credit(amount_to)  # Reflects total deposits in the system
 
             logger.info(f"Balances updated successfully for transaction {transaction_id}: "
-                        f"User Balance: {user_account.balance}, Platform Balance: {platform_account.balance}")
+                        f"User Balance: {user_account.balance}, "
+                        f"Vault Balance: {vault_account.balance}, "
+                        f"Commission Balance: {commission_account.balance}")
         except USDAccount.DoesNotExist:
             logger.error(f"USDAccount not found for user: {transaction.user}")
         except PlatformAccount.DoesNotExist:
             logger.error("PlatformAccount not found for USD")
         except Exception as e:
             logger.error(f"Error updating balances for transaction {transaction_id}: {e}", exc_info=True)
+
 
     # Linkio
 
@@ -524,14 +616,13 @@ class DepositService:
         vendor_number = vendor.get("vendorNumber", "Unknown")
         vendor_bank = vendor.get("vendorBank", "Unknown")
 
-        
+
         # Prepare payload
         try:
             amount_decimal = Decimal(str(amount))
         except InvalidOperation:
             raise ValueError("Invalid amount format received from API.")
 
-        # Prepare payload
         payload = {
             "business_id": "459990459",
             "type": "buy_ramp",
@@ -544,6 +635,7 @@ class DepositService:
             "wallet_address": settings.PLATFORM_CUSTODY_STELLAR_ACCOUNT,
             "network": network,
         }
+
         headers = {
             "accept": "application/json",
             "ngnc-sec-key": "ngnc_s_lk_d770850270259aa81a4ac216016f490f39515da7330b83dd380e3c17a1e348fa",
@@ -573,14 +665,12 @@ class DepositService:
 
             print(f"Transaction Reference: {transaction_reference}")
 
-            #fee = calculate_fee('deposit', amount)
-
             # Record the transaction if user is authenticated
             if user and user.is_authenticated:
                 with db_transaction.atomic():
                     transaction = Transaction(
                         user=user,
-                        amount=amount_decimal,
+                        amount=amount_decimal,  # Initial amount set
                         currency=currency,
                         transaction_id=transaction_reference,
                         status="Processing",
@@ -588,22 +678,21 @@ class DepositService:
                         gateway="Link",
                         target_currency="USDC",
                         transaction_type="Deposit",
-                        #fee_amount=fee,
+                        details="Transaction initiated via Link"
                     )
-                    transaction.save()
+                transaction.memo = f"LINK-{uuid.uuid4().hex[:8]}"
+                transaction.save()
 
-                    # Start polling only if user is authenticated
-                    threading.Thread(target=DepositService.poll_transaction_status,
-                                     args=(transaction_reference, user, transaction.id, amount)).start()
+                # Start polling only if user is authenticated
+                threading.Thread(target=DepositService.poll_transaction_status,
+                                 args=(transaction_reference, user, transaction.id, amount)).start()
 
             return transaction_data
 
         except requests.RequestException as e:
-            # Catch and log any request-related exceptions
             print(f"Request Error: {e}")
             raise ValueError(f"Failed to complete deposit request: {e}")
         except ValueError as e:
-            # Re-raise value errors with context
             print(f"Deposit Initiation Error: {e}")
             raise
 
@@ -611,27 +700,14 @@ class DepositService:
     def poll_transaction_status(transaction_reference, user, transaction_id, amount):
         """
         Polls the transaction status every 30 seconds until confirmed or timeout.
-
-        Args:
-            amount
-            transaction_reference (str): The unique reference ID of the transaction.
-            user (User): The user object associated with the transaction.
-            transaction_id (int): The ID of the transaction to update.
-
-        Returns:
-            None
         """
-        # Time interval for polling (in seconds)
         polling_interval = 60  # 1 minute
         timeout = 600  # 10 minutes timeout
         start_time = time.time()  # Record the start time
 
-        # Log the start of polling
         print(f"Polling started for transaction {transaction_reference}.")
 
-        # Keep polling until the transaction is successful or timeout is reached
         while True:
-            # If timeout is reached, break out of the loop
             if time.time() - start_time > timeout:
                 print(f"Polling timed out after {timeout} seconds.")
                 break
@@ -645,31 +721,35 @@ class DepositService:
                 if status == "success":
                     print(f"Transaction {transaction_reference} confirmed successfully!")
 
-                    # Update the transaction model with status 'success'
+                    # Update the transaction model with status 'success' and updated amount
                     transaction = Transaction.objects.get(id=transaction_id)
+
+                    # Get the 'Estimated USDC' from the API response
+                    estimated_usdc = float(transaction_data.get("Estimated USDC", 0))  # Ensure it's a float
+
+                    # Update the transaction amount field with the estimated USDC
                     transaction.status = "Success"
+                    transaction.amount = Decimal(str(estimated_usdc))  # Update the amount field with the estimated USDC
+                    transaction.fee_amount = fee_amount
                     transaction.save()
 
                     # Now update the user's USDAccount balance
                     user_usd_account = USDAccount.objects.get(user=user)
 
-                    # Subtract the calculated fee from the payout amount
-                    fee_amount = calculate_fee('deposit', amount)  # Assuming 'amount' is the deposit amount
-                    payout_amount = float(
-                        transaction_data.get("payout_amount", 0))  # Get the payout amount (ensure it's a float)
-
-                    # Deduct the fee from the payout amount before updating the balance
-                    user_usd_account.balance += (payout_amount - fee_amount)
+                    # Subtract the calculated fee from the estimated USDC amount
+                    fee_amount = calculate_fee('deposit', amount)
+                    user_usd_account.balance += (estimated_usdc - fee_amount)
 
                     user_usd_account.save()
 
-                    platform_account = PlatformAccount.objects.get(name="Fees")
+                    # Update platform accounts for fees and pool
+                    platform_account = PlatformAccount.objects.get(name="Commission")
                     platform_account.balance += fee_amount
                     platform_account.save()
 
                     try:
                         platform_account = PlatformAccount.objects.get(name="Pool")
-                        platform_account.balance += transaction_data.get("payout_amount", 0)
+                        platform_account.balance += estimated_usdc
                         platform_account.save()
                     except PlatformAccount.DoesNotExist:
                         print("Platform account with name 'pool' not found.")
@@ -680,9 +760,8 @@ class DepositService:
 
             except ValueError as e:
                 print(f"Error fetching transaction status: {e}")
-                break  # Stop polling if an error occurs
+                break
 
-            # Wait for the next polling interval
             time.sleep(polling_interval)
 
     @staticmethod

@@ -5,19 +5,27 @@ from decimal import Decimal, InvalidOperation
 from enum import Enum
 from typing import Dict, Any, Union, Optional, Callable
 
+from datetime import datetime
+import json
+
 import requests
 from django.conf import settings
 from django.db import transaction as txn
 from stellar_sdk import Server, Asset, Keypair, TransactionBuilder, Network, Payment
 from stellar_sdk.exceptions import BadRequestError, NotFoundError
 
+
 from app.models import Transaction, USDAccount, PlatformAccount, User
 from app.services.transact.utils.changelly_crypto import ApiService
 from app.services.transact.utils.config_changelly import STELLAR_SERVER, STELLAR_SECRET_KEY
 from app.services.transact.utils.utils import calculate_fee
 from swif.settings import CHANGELLY_FIAT_URL
+import uuid
 
 logger = logging.getLogger(__name__)
+
+
+
 
 
 @dataclass
@@ -45,11 +53,11 @@ class WithdrawalService:
         self.user = user
         self.usd_account = USDAccount.objects.get(user=user)
         self.platform_account = PlatformAccount.objects.first()
-        self.stellar_server = Server("https://horizon-testnet.stellar.org")
+        self.stellar_server = Server("https://horizon.stellar.org")
         self.api_service = ApiService()
         self.swif_pool_account = settings.PLATFORM_CUSTODY_STELLAR_ACCOUNT
         self.swif_pool_keypair = Keypair.from_secret(settings.STELLAR_PLATFORM_SECRET)
-        self.stellar_network = Network.TESTNET_NETWORK_PASSPHRASE
+        self.stellar_network = Network.PUBLIC_NETWORK_PASSPHRASE
 
     # DIRECT STELLAR WITHDRAWAL
     def validate_stellar_address(self, address: str) -> bool:
@@ -61,45 +69,55 @@ class WithdrawalService:
         except Exception as e:
             logger.error(f"Error validating Stellar address '{address}': {str(e)}")
             return False
+    def generate_unique_transaction_id():
+        """Generates a unique transaction ID."""
+        return str(uuid.uuid4())
 
-    def withdraw_stellar(self, amount: Decimal, destination_account: str, transaction_id: str) -> Dict[str, Any]:
+    def withdraw_stellar(self, amount: Decimal, destination_account: str, transaction_id: str = None) -> dict:
         """
-        Withdraw the specified amount of USDC from the pooled Stellar account to the given destination account.
+       Withdraw the specified amount of USDC from the pooled Stellar account to the given destination account.
 
         :param amount: The amount of USDC to withdraw.
         :param destination_account: The Stellar account to which the USDC will be sent.
-        :param transaction_id: A unique ID for the transaction.
+        :param transaction_id: A unique ID for the transaction (if not provided, it will be generated).
         :return: A dictionary containing transaction details or an error message.
         """
 
         try:
             amount = Decimal(str(amount))
-        except (TypeError, InvalidOperation):
+        except (TypeError, ValueError):
             return {"error": "Invalid amount format."}
 
-        # Validate amount
         if amount <= 0:
             return {"error": "Amount must be greater than zero."}
 
-        """# Check user's USD account balance
-        if self.usd_account.balance < amount:
-            return {"error": "Insufficient balance."}"""
+        # Ensure unique transaction ID
+        if not transaction_id:
+            transaction_id = generate_unique_transaction_id()
+    
+        attempt = 0
+        max_attempts = 3  # Avoid infinite loops
+
+        while attempt < max_attempts:
+            if not Transaction.objects.filter(user=self.user, transaction_id=transaction_id).exists():
+                break
+            transaction_id = generate_unique_transaction_id()
+            attempt += 1
+
+        if attempt == max_attempts:
+            return {"error": "Too many attempts to generate a unique transaction ID."}
+
+        unique_memo = str(uuid.uuid4())  # Ensure a unique memo for every transaction
 
         # Use a database transaction to ensure atomicity
-        with txn.atomic():
-            # Check if the transaction already exists
-            if Transaction.objects.filter(user=self.user, transaction_id=transaction_id).exists():
-                return {"error": "Duplicate transaction detected."}
-
+        with txn.atomic(savepoint=False):
             # Calculate fees
             try:
                 total_amount, fee_amount, net_amount = calculate_fee('withdrawal', amount)
 
-                # Check if user has enough balance for the withdrawal + fee
                 if self.usd_account.balance < (amount + fee_amount):
                     return {"error": "Insufficient balance after fees."}
 
-                # Deduct the amount + fee
                 self.usd_account.balance -= (amount + fee_amount)
                 self.usd_account.save()
 
@@ -107,8 +125,7 @@ class WithdrawalService:
                 logger.error(f"Fee calculation error: {str(e)}")
                 return {"error": "Error calculating fees."}
 
-            # Update platform fees account
-            platform_fee_account = PlatformAccount.objects.filter(name="Fees").first()
+            platform_fee_account = PlatformAccount.objects.filter(name="Commission").first()
             if platform_fee_account:
                 platform_fee_account.balance += fee_amount
                 platform_fee_account.save()
@@ -122,53 +139,91 @@ class WithdrawalService:
             if not self.validate_stellar_address(destination_account):
                 return {"error": "Invalid destination Stellar account."}
 
-            # Create the transaction
             try:
                 pooled_account = self.stellar_server.load_account(settings.PLATFORM_CUSTODY_STELLAR_ACCOUNT)
 
-                # Create the Payment operation for the net amount
                 payment_operation = Payment(
                     destination=destination_account,
                     asset=Asset("USDC", settings.USDC_ISSUER_PUBLIC_KEY),
                     amount=str(net_amount)
                 )
 
-                # Build the transaction
                 transaction = (
                     TransactionBuilder(
                         source_account=pooled_account,
-                        network_passphrase=Network.TESTNET_NETWORK_PASSPHRASE,
-                        base_fee=100
+                        network_passphrase=Network.PUBLIC_NETWORK_PASSPHRASE,
+                        base_fee=100    
                     )
                     .append_operation(payment_operation)
                     .set_timeout(30)
                     .build()
                 )
 
-                # Sign the transaction
                 transaction.sign(user_keypair)
 
-                # Submit the transaction
                 response = self.stellar_server.submit_transaction(transaction)
 
-                # Log transaction details
                 logger.info(f"Stellar transaction successful: {response['hash']}")
 
-                # Save the transaction in your database
+                transaction_details = {
+                    "stellar_transaction_hash": response['hash'],
+                    "destination_account": destination_account,
+                    "fee_amount": str(fee_amount),
+                    "net_amount": str(net_amount),
+                    "total_amount": str(total_amount),
+                    "currency": "USDC",
+                    "memo": unique_memo,
+                    "timestamp": datetime.utcnow().isoformat()
+                }
+
                 Transaction.objects.create(
                     user=self.user,
                     amount=net_amount,
+                    fee_amount=fee_amount,
                     transaction_type='withdraw',
                     target_currency='USDC',
-                    transaction_id=transaction_id  # Store the unique transaction ID
-
+                    transaction_id=transaction_id,
+                    memo=unique_memo,  # Ensure uniqueness
+                    status='completed',
+                    details=json.dumps(transaction_details),
+                    destination_account=destination_account
                 )
 
-                return {"success": True, "transaction_hash": response['hash']}
+                return {
+                    "success": True, 
+                    "transaction_hash": response['hash'],
+                    "details": transaction_details
+                }
 
             except Exception as e:
                 logger.error(f"Error during Stellar withdrawal: {str(e)}")
-                return {"error": "Transaction failed.", "details": str(e)}
+
+                error_details = {
+                    "error_message": str(e),
+                    "destination_account": destination_account,
+                    "attempted_amount": str(amount),
+                    "timestamp": datetime.utcnow().isoformat()
+                }
+
+                Transaction.objects.create(
+                    user=self.user,
+                    amount=amount,
+                    fee_amount=fee_amount,
+                    transaction_type='withdraw',
+                    target_currency='USDC',
+                    transaction_id=transaction_id,
+                    memo=unique_memo,  # Ensure uniqueness even for failed transactions
+                    status='failed',
+                    details=json.dumps(error_details),
+                    destination_account=destination_account
+                )
+
+                return {
+                    "error": "Transaction failed.",
+                    "details": error_details
+                }
+
+
 
     # CHANGELLY_CRYPTO WITHDRAWAL
 
@@ -252,11 +307,10 @@ class WithdrawalService:
                 user.usd_account.save()  # Save the updated balance
 
                 # Calculate and deduct the platform fee
-                platform_fee_percentage = 0.02  # Example: 2% fee, modify as per your fee structure
-                fee_amount = validated_amount * platform_fee_percentage
+                fee_amount = calculate_fee('withdrawal', validated_amount)
 
                 # Update the platform fees account
-                platform_fee_account = PlatformAccount.objects.filter(name="Fees").first()
+                platform_fee_account = PlatformAccount.objects.filter(name="Commission").first()
                 if platform_fee_account:
                     platform_fee_account.balance += fee_amount
                     platform_fee_account.save()
@@ -622,7 +676,7 @@ class WithdrawalService:
         """
         Update the PlatformAccount (Pool) balance.
         """
-        pool_account = PlatformAccount.objects.get(account_name="Pool")
+        pool_account = PlatformAccount.objects.get(account_name="Vault")
         pool_account.balance -= amount
         pool_account.save()
 
@@ -634,7 +688,7 @@ class WithdrawalService:
         try:
             # Fetch the destination wallet address
             server = Server(horizon_url="https://horizon.stellar.org")
-            network = Network.PUBLIC_NETWORK_PASSPHRASE  # Use Network.TESTNET for testing
+            network = Network.PUBLIC_NETWORK_PASSPHRASE 
 
             # Define the custody account details
             custody_wallet_address = settings.PLATFORM_CUSTODY_STELLAR_ACCOUNT
@@ -645,7 +699,7 @@ class WithdrawalService:
             source_account = server.load_account(custody_wallet_address)
 
             # Create the USDC asset
-            usdc_asset = Asset("USDC", "GCO6ZGZBGXJMQ3C43OS5YDRCZ7H3QJFNXYQ4ZMEF3PE7O5A4NZ5P")
+            usdc_asset = Asset("USDC", "GA5ZSEJYB37JRC5AVCIA5MOP4RHTM335X2KGX3IHOJAPP5RE34K4KZVN")
 
             # Build the payment operation
             payment_op = source_account.payment(destination_wallet_address, amount=amount, asset=usdc_asset)

@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Verify Your BorderCash Account</title>
+    <style type="text/css">
+        /* Base Styles */
+        body, html {
+            margin: 0;
+            padding: 0;
+            font-family: 'Arial', sans-serif;
+            line-height: 1.6;
+            color: #333333;
+            background-color: #f5f7fa;
+        }
+        
+        /* Email Container */
+        .email-container {
+            max-width: 600px;
+            margin: 0 auto;
+            background: #ffffff;
+        }
+        
+        /* Header */
+        .header {
+            padding: 30px 20px;
+            text-align: center;
+            background: linear-gradient(135deg, #2c3e50 0%, #3498db 100%);
+            color: white;
+        }
+        
+        .header img {
+            max-width: 180px;
+            height: auto;
+        }
+        
+        .header h1 {
+            margin: 15px 0 0;
+            font-size: 24px;
+            font-weight: 600;
+        }
+        
+        /* Content */
+        .content {
+            padding: 30px;
+        }
+        
+        .welcome-text {
+            font-size: 16px;
+            margin-bottom: 25px;
+        }
+        
+        /* Verification Box */
+        .verification-box {
+            background: #f8fafc;
+            border: 1px solid #e2e8f0;
+            border-radius: 8px;
+            padding: 25px;
+            margin: 25px 0;
+            text-align: center;
+        }
+        
+        .verification-box h2 {
+            color: #2c3e50;
+            margin-top: 0;
+            font-size: 20px;
+        }
+        
+        /* Button */
+        .verify-button {
+            display: inline-block;
+            padding: 12px 30px;
+            background: #3498db;
+            color: white !important;
+            text-decoration: none;
+            border-radius: 5px;
+            font-weight: bold;
+            font-size: 16px;
+            margin: 15px 0;
+        }
+        
+        /* Link Fallback */
+        .link-fallback {
+            word-break: break-all;
+            font-size: 14px;
+            color: #4a5568;
+            margin-top: 15px;
+        }
+        
+        /* Features */
+        .features {
+            margin: 30px 0;
+        }
+        
+        .features h3 {
+            color: #2c3e50;
+            font-size: 18px;
+            margin-bottom: 15px;
+        }
+        
+        .features ul {
+            padding-left: 20px;
+            margin: 0;
+        }
+        
+        .features li {
+            margin-bottom: 10px;
+        }
+        
+        /* Footer */
+        .footer {
+            padding: 20px;
+            text-align: center;
+            background: #f8f9fa;
+            font-size: 12px;
+            color: #718096;
+        }
+        
+        .footer a {
+            color: #3498db;
+            text-decoration: none;
+        }
+        
+        /* Responsive */
+        @media only screen and (max-width: 600px) {
+            .content {
+                padding: 20px;
+            }
+            .header h1 {
+                font-size: 20px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="email-container">
+        <!-- Header with Gradient Background -->
+        <div class="header">
+            <img src="https://border.cash/static/images/logo-white.png" alt="BorderCash Logo">
+            <h1>Verify Your Email Address</h1>
+        </div>
+        
+        <!-- Main Content -->
+        <div class="content">
+            <div class="welcome-text">
+                <p>Hello <strong>{{ username }}</strong>,</p>
+                <p>Thank you for signing up with BorderCash! To start using your account, please verify your email address.</p>
+            </div>
+            
+            <!-- Verification Box -->
+            <div class="verification-box">
+                <h2>One Last Step</h2>
+                <p>Click the button below to verify your email address and activate your BorderCash account:</p>
+                
+                <!-- Primary Verification Button -->
+                <a href="{{ verification_link }}" class="verify-button">Verify Email Address</a>
+                
+                <!-- Fallback Text Link -->
+                <div class="link-fallback">
+                    <p>If the button doesn't work, copy and paste this link into your browser:</p>
+                    <p>{{ verification_link }}</p>
+                </div>
+            </div>
+            
+            <!-- Features List -->
+            <div class="features">
+                <h3>Why verify your email?</h3>
+                <ul>
+                    <li>Secures your BorderCash account</li>
+                    <li>Gives you full access to all features</li>
+                    <li>Ensures you receive important notifications</li>
+                </ul>
+            </div>
+            
+            <p>If you didn't create a BorderCash account, please ignore this email or <a href="mailto:support@border.cash">contact support</a>.</p>
+        </div>
+        
+        <!-- Footer -->
+        <div class="footer">
+            <p>© {% now "Y" %} BorderCash. All rights reserved.</p>
+            <p>
+                <a href="https://border.cash/privacy">Privacy Policy</a> | 
+                <a href="https://border.cash/terms">Terms of Service</a>
+            </p>
+            <p>
+                BorderCash Ltd, 123 Financial District, Lagos, Nigeria
+            </p>
+        </div>
+    </div>
+</body>
+</html>

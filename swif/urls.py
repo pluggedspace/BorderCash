@@ -6,17 +6,28 @@ from drf_yasg import openapi
 import app.urls
 import kyc.urls
 import iban.urls
-import utils.urls
+
 import invest.urls
+import monica.urls
+
+from django.shortcuts import render
+
+def home_view(request):
+    return render(request, "index.html")
+
+
+
+def trigger_error(request):
+    division_by_zero = 1 / 0
 
 # Create the schema view using get_schema_view from drf-yasg
 schema_view = get_schema_view(
     openapi.Info(
         title="My API",
         default_version='v1',
-        description="API documentation for my Django app",
-        terms_of_service="https://www.google.com/policies/terms/",
-        contact=openapi.Contact(email="support@myapi.com"),
+        description="API documentation for BorderCash",
+        terms_of_service="https://border.cash/terms/",
+        contact=openapi.Contact(email="support@border.cash"),
         license=openapi.License(name="BSD License"),
     ),
     public=True,
@@ -24,12 +35,16 @@ schema_view = get_schema_view(
 )
 
 urlpatterns = [
+    path('', home_view),  # Root URL
     path('admin/', admin.site.urls),
     path('api/', include(app.urls)),
     path('kyc/', include(kyc.urls)),
     path('iban/', include(iban.urls)),
-    path('util/', include(utils.urls)),
+    
     path('invest/', include(invest.urls)),
+    path('m/', include(monica.urls)),
+    path('sentry-debug/', trigger_error),
+    
 
     # Swagger documentation
     re_path(r'^swagger(?P<format>\.json|\.yaml)$', schema_view.without_ui(cache_timeout=0), name='schema-json'),

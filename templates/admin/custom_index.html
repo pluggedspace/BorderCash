@@ -1,0 +1,13 @@
+{% extends "admin/index.html" %}
+
+{% block content %}
+    <h2>Pending Approvals</h2>
+    <ul>
+        {% for item in custom_notifications %}
+            <li>
+                <a href="{{ item.url }}">{{ item.label }} ({{ item.count }})</a>
+            </li>
+        {% endfor %}
+    </ul>
+    {{ block.super }}
+{% endblock %}

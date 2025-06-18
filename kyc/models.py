@@ -1,14 +1,15 @@
-from time import timezone
-
+import base64
+from django.urls import reverse
+from django.utils import timezone
 from django.contrib.auth import get_user_model
 from django.db import models
 from django.utils import timezone
 from dynaconf import ValidationError
-
 from app.models import UserProfile
 from django_countries.fields import CountryField
-
-from kyc.services.validators import validate_document_size, validate_document_type
+from storages.backends.dropbox import DropboxStorage
+import dropbox
+from .services.dropbox import DropboxService
 
 
 class KYCRequest(models.Model):
@@ -20,26 +21,17 @@ class KYCRequest(models.Model):
     )
 
     # Personal information
-    full_name = models.CharField(max_length=255)
+    full_name = models.CharField(max_length=255, null=True, blank=True)
     date_of_birth = models.DateField(null=True, blank=True)
 
     # Address information
     address = models.TextField(null=True, blank=True)
     country = CountryField(blank_label='(select country)', null=True, blank=True)
 
-    # Documents
-    id_document = models.FileField(
-        upload_to='kyc_documents/id/',
-        validators=[validate_document_size, validate_document_type]
-    )
-    selfie = models.FileField(
-        upload_to='kyc_documents/selfie/',
-        validators=[validate_document_size, validate_document_type]
-    )
-    address_document = models.FileField(
-        upload_to='kyc_documents/address/',
-        validators=[validate_document_size, validate_document_type]
-    )
+    # Dropbox file paths instead of FileField
+    id_document = models.URLField(blank=True, null=True)
+    selfie = models.URLField(blank=True, null=True)
+    address_document = models.URLField(blank=True, null=True)
 
     # Status tracking
     status = models.CharField(
@@ -84,54 +76,60 @@ class KYCRequest(models.Model):
             raise ValidationError('User already has a pending KYC request')
 
     def save(self, *args, **kwargs):
-        # Set reviewed_at when status changes
-        if self.pk:
-            old_instance = KYCRequest.objects.get(pk=self.pk)
-            if old_instance.status != self.status:
-                self.reviewed_at = timezone.now()
+        """Upload files to Dropbox before saving"""
+        dropbox_service = DropboxService.get_instance()
 
-                # Create notification
-                Notification.objects.create(
-                    user=self.user,
-                    message=self._get_status_change_message(),
-                    notification_type='kyc_status'
-                )
+        if isinstance(self.id_document, models.fields.files.FieldFile):
+            dropbox_path = f"/kyc_documents/id/{self.user.id}_{self.id_document.name}"
+            self.id_document = dropbox_service.upload_file(self.id_document, dropbox_path)
+
+        if isinstance(self.selfie, models.fields.files.FieldFile):
+            dropbox_path = f"/kyc_documents/selfie/{self.user.id}_{self.selfie.name}"
+            self.selfie = dropbox_service.upload_file(self.selfie, dropbox_path)
+
+        if isinstance(self.address_document, models.fields.files.FieldFile):
+            dropbox_path = f"/kyc_documents/address/{self.user.id}_{self.address_document.name}"
+            self.address_document = dropbox_service.upload_file(self.address_document, dropbox_path)
 
         super().save(*args, **kwargs)
 
-    def _get_status_change_message(self):
-        """Generate notification message for status change"""
-        if self.status == 'approved':
-            return "Your KYC verification has been approved!"
-        elif self.status == 'rejected':
-            reason = ": {self.rejection_reason}" if self.rejection_reason else ""
-            return "Your KYC verification was rejected{reason}"
-        return "Your KYC status has been updated to {self.status}"
+    def get_private_url(self, file_field):
+        """
+        Get the secure private URL for a file using Dropbox.
+        """
+        dropbox_service = DropboxService()
+        file_path = getattr(self, file_field)
 
 
-class Notification(models.Model):
-    user = models.ForeignKey(
-        UserProfile,
-        on_delete=models.CASCADE,
-        related_name='notifications'
-    )
-    message = models.TextField()
-    notification_type = models.CharField(
-        max_length=50,
-        choices=[
-            ('kyc_status', 'KYC Status Change'),
-            ('reminder', 'Reminder'),
-            ('other', 'Other')
-        ],
-        default='other'
-    )
-    created_at = models.DateTimeField(auto_now_add=True)
-    read_at = models.DateTimeField(null=True, blank=True)
+        # Fetch the temporary link from Dropbox
+        return dropbox_service.get_temporary_link(f"/{file_path}")
 
-    class Meta:
-        ordering = ['-created_at']
+    @classmethod
+    def create_from_profile(cls, user_profile, **additional_data):
+        """
+        Create a KYC request pre-filled with user profile data
+    
+        Args:
+            user_profile: UserProfile instance
+            additional_data: Any additional fields to override or add
+        
+        Returns:
+            KYCRequest: New pre-filled KYC request instance
+        """
+        # Construct address from available fields
+        address_parts = filter(None, [user_profile.city, user_profile.state, user_profile.country])
+        address = ", ".join(address_parts)
 
-    def mark_as_read(self):
-        from django.utils.timezone import now
-        self.read_at = now()
-        self.save()
+
+        profile_data = {
+            'user': user_profile,
+            'full_name': user_profile.full_name,
+            'date_of_birth': user_profile.date_of_birth,
+            'country': user_profile.country,
+            'address': address  # Add constructed address
+        }
+
+        # Override or add any additional data
+        profile_data.update(additional_data)
+
+        return cls.objects.create(**profile_data)

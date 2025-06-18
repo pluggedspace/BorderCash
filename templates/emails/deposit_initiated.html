@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <style>
+        body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px; }
+        .header { color: #2c3e50; border-bottom: 2px solid #f1f1f1; padding-bottom: 10px; }
+        .content { margin: 20px 0; }
+        .footer { font-size: 12px; color: #7f8c8d; border-top: 2px solid #f1f1f1; padding-top: 10px; }
+        .transaction { background-color: #f8f9fa; padding: 15px; border-radius: 5px; margin: 15px 0; }
+        .amount { font-size: 24px; color: #27ae60; font-weight: bold; }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h2>Deposit Initiated</h2>
+    </div>
+    
+    <div class="content">
+        <p>Hello <strong>{{ username }}</strong>,</p>
+        <p>We've received your deposit request with the following details:</p>
+        
+        <div class="transaction">
+            <p><span class="amount">{{ amount }} {{ currency }}</span></p>
+            <p><strong>Payment Method:</strong> {{ gateway }}</p>
+            <p><strong>Transaction ID:</strong> {{ deposit_id }}</p>
+            <p><strong>Date:</strong> {{ date }}</p>
+        </div>
+        
+        <p>Your funds will be credited to your account once the transaction is confirmed on the blockchain.</p>
+        <p>For USDC deposits, this typically takes 2-5 minutes. For other cryptocurrencies, it may take longer depending on network congestion.</p>
+    </div>
+    
+    <div class="footer">
+        <p>Need help? Contact our support team at support@border.cash</p>
+        <p>© {% now "Y" %} Border Cash. All rights reserved.</p>
+    </div>
+</body>
+</html>

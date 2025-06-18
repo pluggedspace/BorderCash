@@ -1,11 +1,7 @@
-from django.urls import path, include
-from rest_framework.routers import DefaultRouter
-from .views import KYCViewSet
-
-
-router = DefaultRouter()
-router.register(r'kyc', KYCViewSet, basename='kyc')
+from django.urls import path
+from .views import UploadKycDocumentView, kyc_status
 
 urlpatterns = [
-    path('', include(router.urls)),
+    path('upload/', UploadKycDocumentView.as_view(), name='upload-kyc-document'),
+    path('status/', kyc_status, name='kyc-status'),
 ]

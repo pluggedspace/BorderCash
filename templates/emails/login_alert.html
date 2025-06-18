@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>New Login Detected</title>
+    <style>
+        body { font-family: Arial, sans-serif; line-height: 1.6; }
+        .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+        .header { color: #2c3e50; }
+        .alert-box { background: #fff8e1; padding: 15px; border-left: 4px solid #ffc107; }
+        .footer { margin-top: 20px; font-size: 0.9em; color: #7f8c8d; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1 class="header">New Login Alert</h1>
+        <p>Hello {{ username }},</p>
+        
+        <div class="alert-box">
+            <p>We detected a new login to your BorderCash account:</p>
+            <p><strong>IP Address:</strong> {{ ip }}</p>
+            <p><strong>Time:</strong> {% now "DATETIME_FORMAT" %}</p>
+        </div>
+
+        <p>If this was you, you can ignore this message. If you don't recognize this activity, please secure your account immediately.</p>
+
+        <div class="footer">
+            <p>BorderCash Security Team</p>
+        </div>
+    </div>
+</body>
+</html>
