@@ -26,7 +26,7 @@ SECRET_KEY = 'django-insecure-^g9!=@fy()kp51jpxu2e99d0n#7%_d4-5+28-*c_o!@0=5n!%n
 DEBUG = True
 APP_NAME = "Border Cash"
 
-ALLOWED_HOSTS = ['api.border.cash', '136.244.105.63', '45.77.138.21', 'localhost', '127.0.0.1', 'api2.border.cash']
+ALLOWED_HOSTS = ['api.border.cash', '136.244.105.63', '45.77.138.21', 'localhost', '127.0.0.1', ]
 
 # Application definition
 INSTALLED_APPS = [
@@ -54,6 +54,7 @@ INSTALLED_APPS = [
     'invest',
     'monica',
     'drac',
+    'backup',
 
 ]
 
@@ -73,11 +74,11 @@ MIDDLEWARE = [
 ]
 
 ROOT_URLCONF = 'swif.urls'
-CSRF_TRUSTED_ORIGINS = ['https://api.border.com', 'http://api.border.cash','https://api2.border.cash', 'http://api2.border.cash']
+CSRF_TRUSTED_ORIGINS = ['https://api.border.com', 'http://api.border.cash',]
 CORS_ALLOW_ALL_ORIGINS = True
 
 CORS_ALLOWED_ORIGINS = [
-     "https://border.cash",]
+     "https://border.cash", "https://api.border.cash"]
 
 TEMPLATES = [
     {
@@ -336,7 +337,8 @@ LOGGING = {
 }
 
 sentry_sdk.init(
-    dsn="https://f634fed9af121dd7daee5a2dc3e1f7e4@o4508674534670336.ingest.de.sentry.io/4508674536702032",
+    dsn="https://c6549681741bed91e608817a270c7647@o4509524089044992.ingest.de.sentry.io/4509524107264080",
+    # Add data like request headers and IP for users,
     # Set traces_sample_rate to 1.0 to capture 100%
     # of transactions for tracing.
     traces_sample_rate=1.0,
