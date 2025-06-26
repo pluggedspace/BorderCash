@@ -91,6 +91,18 @@ class Command(BaseCommand):
         # Upload to Google Drive
         try:
             uploaded_file = upload_to_drive(backup_path)
+
+            backup_size = os.path.getsize(backup_path)
+
+
+            from backup.models import Backup
+
+            Backup.objects.create(
+                file_name=os.path.basename(backup_path),
+                drive_url=uploaded_file.get('webViewLink'),
+                backup_size=backup_size
+            )
+
             self.stdout.write(f"☁️ Uploaded to Drive: {uploaded_file.get('webViewLink')}")
         except Exception as e:
             self.stdout.write(f"❌ Drive upload failed: {e}")
