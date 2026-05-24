@@ -112,7 +112,7 @@ Installation
 
 1. Clone the repository:
 
-git clone https://github.com/rootcreator/bank.git
+git clone https://github.com/pluggedspace/BorderCash.git
 cd Bank
 
 
