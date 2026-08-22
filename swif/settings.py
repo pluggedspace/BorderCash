@@ -16,7 +16,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 
 
 # Load the Firebase credentials
-FIREBASE_CRED = os.path.join(BASE_DIR, 'swif-wallet-firebase-adminsdk-fbsvc-8eeebe7f1f.json') # Update with actual path
+FIREBASE_CRED = os.getenv('FIREBASE_CRED_PATH', os.path.join(BASE_DIR, 'swif-wallet-firebase-adminsdk-fbsvc-8eeebe7f1f.json')) # Update with actual path
 
 
 # SECURITY WARNING: keep the secret key used in production secret!
@@ -290,6 +290,7 @@ RELOADLY_TOPUP_URL = "https://topups.reloadly.com/"
 ALIEXPRESS_API_KEY = os.getenv("ALIEXPRESS_API_KEY") 
 
 GROQ_API_KEY = os.getenv("GROQ_API_KEY")
+LOCATIONIQ_API_KEY = os.getenv("LOCATIONIQ_API_KEY", "your-locationiq-api-key")
 
 
 
@@ -340,7 +341,7 @@ LOGGING = {
 }
 
 sentry_sdk.init(
-    dsn="sentry+https://dsn-example@sentry.io/12345",
+    dsn=os.getenv("SENTRY_DSN", "https://dsn-example@sentry.io/12345"),
     # Add data like request headers and IP for users,
     # Set traces_sample_rate to 1.0 to capture 100%
     # of transactions for tracing.

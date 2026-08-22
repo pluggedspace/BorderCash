@@ -76,7 +76,7 @@ def process_kyc_task(kyc_request_id=None):
     except Exception as e:
         logger.error(f"Error processing KYC request {kyc_request_id}: {str(e)}", exc_info=True)
 
-api_key = 'pk.10bfa8852fcb5b465d8247a86c3170a5'
+api_key = settings.LOCATIONIQ_API_KEY
 
 
 @shared_task

@@ -3,6 +3,7 @@ from django.utils import timezone
 from django.db.models.signals import post_save
 from django.dispatch import receiver
 from django.core.mail import send_mail
+from django.conf import settings
 from django.db.models import Sum
 from app.models import Transaction, Alert, HighRiskCountry
 
@@ -161,8 +162,8 @@ def notify_admin(transaction, flags):
     send_mail(
         'Suspicious Transaction Alert',
         f"Transaction {transaction.id} flagged: {', '.join(flags)}",
-        'admin@example.com',
-        ['admin@example.com']
+        settings.DEFAULT_FROM_EMAIL,
+        [settings.SUPPORT_EMAIL]
     )
 
 

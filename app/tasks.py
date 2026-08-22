@@ -2,6 +2,7 @@ from celery import shared_task
 from django.utils.timezone import now, timedelta
 from .models import UserPoints, PromotionalEmail, ExchangeRate
 from django.core.mail import send_mail
+from django.conf import settings
 
 import requests
 from django.db import transaction
@@ -35,7 +36,7 @@ def send_promotional_email(email_id):
         send_mail(
             subject=email.subject,
             message=email.body,
-            from_email="mail@example.com",  # Use your actual sender email
+            from_email=settings.DEFAULT_FROM_EMAIL,  # Use your actual sender email
             recipient_list=list(recipients),
             fail_silently=False,
         )
