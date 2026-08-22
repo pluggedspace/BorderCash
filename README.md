@@ -251,7 +251,7 @@ Contributing
 
 Contact
 
-For any questions or support, reach out to support@border.cash
+For any questions or support, reach out to support@pluggedspace.org
 
 
 
