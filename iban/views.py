@@ -1,4 +1,5 @@
 import requests
+from django.conf import settings
 from rest_framework import viewsets, status
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
@@ -12,7 +13,11 @@ class IBANAccountViewSet(viewsets.ViewSet):
     @staticmethod
     def create(request):
         user = request.user
-        response = requests.post('https://api.railsr.com/iban/create', json={'user_id': user.id})
+        response = requests.post(
+            f"{settings.RAILSR_BASE_URL}/iban/create",
+            json={'user_id': user.id},
+            headers={'Authorization': f"Bearer {settings.RAILSR_API_KEY}"}
+        )
         if response.status_code == 200:
             iban_data = response.json()
             iban = IBANAccount.objects.create(
@@ -40,7 +45,11 @@ class CardViewSet(viewsets.ViewSet):
     @staticmethod
     def create(request):
         user = request.user
-        response = requests.post('https://api.railsr.com/card/create', json={'user_id': user.id})
+        response = requests.post(
+            f"{settings.RAILSR_BASE_URL}/card/create",
+            json={'user_id': user.id},
+            headers={'Authorization': f"Bearer {settings.RAILSR_API_KEY}"}
+        )
         if response.status_code == 200:
             card_data = response.json()
             card = Card.objects.create(

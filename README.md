@@ -1,16 +1,95 @@
-Wallet System
+# 💸 BorderCash
 
-This is a comprehensive wallet platform built using Django and Flutter, designed to provide users with a seamless experience for managing virtual accounts, investing in assets, and transferring funds. The wallet operates with central custody backed by USDC on the Stellar network and offers access to deposits, transfers, investments, and KYC services.
+BorderCash is a professional, open-source fintech infrastructure designed for cross-border payments, digital wallet management, and tokenized asset investments. It leverages a central custody model backed by USDC on the Stellar network to provide secure, fast, and scalable financial services.
 
-Features
+## 🚀 Features
 
-1. Central Custody and User Wallets
+- **Centralized Custody**: Secure management of user balances with individual wallet records.
+- **Fiat-to-Crypto Bridge**: Seamless deposits and withdrawals via Stellar anchors, converting fiat to USDC.
+- **Multi-Currency Support**: Virtual accounts in USD, EUR, and GBP.
+- **Investment Engine**: Tokenized stock market trading and asset portfolio management.
+- **Integrated KYC**: Built-in identity verification and compliance onboarding.
+- **Dispute Resolution**: Automated and human-led support system via the Monica module.
+- **Reconciliation**: Internal accounting and audit system (DRAC) for financial integrity.
 
-Centralized custody of user balances, with individual wallet records per user.
+## 🛠 Tech Stack
 
-Deposits and withdrawals via Stellar anchors, converting fiat into USDC and storing it on the Stellar network.
+### Backend
+- **Language**: Python 3.10+
+- **Framework**: Django 5.1+ & Django Rest Framework (DRF)
+- **Task Queue**: Celery & Redis
+- **Database**: PostgreSQL
+- **Real-time**: Django Channels (WebSockets)
+- **Auth**: SimpleJWT (JWT Bearer Tokens)
 
-Transfers between users by using unique wallet IDs.
+### Infrastructure & External Integrations
+- **Blockchain**: Stellar Network (USDC)
+- **Storage**: Dropbox (via `django-storages`)
+- **Payment Gateways**: Changelly (Fiat/Crypto bridge)
+- **Identity**: Custom KYC Engine
+- **Deployment**: Docker & Docker Compose
+
+## 📦 Installation
+
+### Prerequisites
+- Python 3.10+
+- PostgreSQL
+- Redis
+- Docker & Docker Compose (Recommended)
+
+### Quick Start with Docker
+1. **Clone the repository**:
+   ```bash
+   git clone https://github.com/BorderCash/BorderCash.git
+   cd BorderCash
+   ```
+
+2. **Configure Environment**:
+   ```bash
+   cp .env.example .env
+   # Edit .env with your actual API keys and secrets
+   ```
+
+3. **Spin up the system**:
+   ```bash
+   docker-compose up --build -d
+   ```
+
+4. **Run Migrations**:
+   ```bash
+   docker-compose exec web python manage.py migrate
+   ```
+
+5. **Create Admin User**:
+   ```bash
+   docker-compose exec web python manage.py createsuperuser
+   ```
+
+### Manual Installation
+1. **Install dependencies**:
+   ```bash
+   pip install -r requirements.txt
+   ```
+2. **Apply Migrations**:
+   ```bash
+   python manage.py migrate
+   ```
+3. **Run Server**:
+   ```bash
+   python manage.py runserver
+   ```
+
+## 📖 Documentation
+
+For a deep dive into the system architecture, API usage, and administration guides, please refer to the [DOCUMENTATION.md](./DOCUMENTATION.md) file.
+
+## 🤝 Contributing
+
+We welcome contributions! Please read our [CONTRIBUTING.md](./CONTRIBUTING.md) and [SECURITY.md](./SECURITY.md) before getting started.
+
+## 📜 License
+
+This project is licensed under the MIT License - see the [LICENSE](./LICENSE) file for details.
 
 
 
@@ -112,7 +191,7 @@ Installation
 
 1. Clone the repository:
 
-git clone https://github.com/pluggedspace/BorderCash.git
+git clone https://github.com/BorderCash/BorderCash.git
 cd Bank
 
 
@@ -172,7 +251,7 @@ Contributing
 
 Contact
 
-For any questions or support, reach out to support@pluggedspace.org
+For any questions or support, reach out to support@border.cash
 
 
 

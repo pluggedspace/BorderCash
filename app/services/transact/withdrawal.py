@@ -570,7 +570,7 @@ class WithdrawalService:
         # Prepare the payload for the Link API request
         payload = {
             "business_id": "459990459",
-            "link_tag": "pluggedspace",
+            "link_tag": "bordercash",
             "type": "sell_ramp",
             "stables": "USDC",
             "amount": amount,

@@ -35,7 +35,7 @@ def send_promotional_email(email_id):
         send_mail(
             subject=email.subject,
             message=email.body,
-            from_email="mail@border.cash",
+            from_email="mail@example.com",  # Use your actual sender email
             recipient_list=list(recipients),
             fail_silently=False,
         )

@@ -69,8 +69,8 @@ def notify_support_about_escalated_disputes():
         send_mail(
             subject="Escalated Disputes Alert",
             message=message,
-            from_email="mail@border.cash",
-            recipient_list=["support@border.cash"],
+            from_email=settings.DEFAULT_FROM_EMAIL,
+            recipient_list=[settings.SUPPORT_EMAIL],
         )
         logger.info("Escalated dispute notification sent to support.")
 

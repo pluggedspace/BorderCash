@@ -5,6 +5,7 @@ import logging
 import os
 from app.models import Transaction
 from django.db import transaction as db_transaction
+from django.conf import settings
 from groq import Groq
 from django.utils import timezone
 from datetime import timedelta
@@ -182,7 +183,6 @@ def should_escalate(user, category, transaction_info=None):
 def notify_human_support(dispute):
     """Notify Swif’s human support team about an escalated dispute."""
     try:
-        support_email = "support@swif.com"
         subject = f"🚨 Escalated Dispute: {dispute.category} (User: {dispute.user.username})"
         message = (
             f"A dispute has been escalated for manual review.\n\n"
@@ -196,7 +196,7 @@ def notify_human_support(dispute):
         )
         
         # Send email notification (assuming Django's send_mail is configured)
-        send_mail(subject, message, "no-reply@swifwallet.com", [support_email])
+        send_mail(subject, message, settings.DEFAULT_FROM_EMAIL, [settings.SUPPORT_EMAIL])
 
         # Log the notification
         logger.info(f"Human support notified for dispute ID {dispute.id}.")
